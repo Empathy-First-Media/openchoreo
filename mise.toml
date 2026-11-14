@@ -18,7 +18,14 @@ tools.shellcheck = "{{ vars.shellcheck_version }}"
 run = '''
 set -eu
 jactionlint --profile correctness
-jactionlint .github/workflows/efm-platform-validation.yml .github/workflows/efm-upstream-sync.yml
+jactionlint \
+  .github/workflows/build-and-test.yml \
+  .github/workflows/codeql.yml \
+  .github/workflows/efm-platform-validation.yml \
+  .github/workflows/efm-upstream-sync.yml \
+  .github/workflows/external-compatibility-scan-tests.yaml \
+  .github/workflows/lint-pr.yml \
+  .github/workflows/scorecard.yml
 '''
 
 [tasks."ci:workflow-audit"]

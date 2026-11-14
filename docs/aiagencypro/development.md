@@ -25,7 +25,7 @@ The native source targets remain authoritative:
 
 | Command | Native consumer |
 | --- | --- |
-| `mise run ci:workflow-lint` | Current GitHub Actions correctness checks across the repository; full default policy checks for the two new fork workflows; pinned ShellCheck |
+| `mise run ci:workflow-lint` | Current GitHub Actions correctness checks across the repository; full default policy checks for the fork validation, sync, source, and security-check workflows; pinned ShellCheck |
 | `mise run ci:workflow-audit` | Full inherited workflow security and policy audit; resolve or review findings before enabling publishing, releases or maintenance |
 | `mise run ci:lint` | `make lint` |
 | `mise run ci:generate` | `make code.gen-check` |
@@ -49,6 +49,10 @@ maintenance remain opt-in while those findings are reviewed for the selected use
 It performs no cluster writes and proves neither identity interoperability nor
 deployment health. Rendered output goes under the already ignored `bin/` directory.
 Use reviewed private values and the pilot guide for a real installation.
+
+The fork configuration workflow runs task validation, workflow lint, and stable
+chart lint/render in one bounded job on every PR and default-branch push.
+This coverage does not depend on enabling the platform's full source build.
 
 ## Run the released platform locally
 
@@ -96,7 +100,7 @@ command. Variables are controls; a saved value is not proof that a job ran.
 
 | Repository variable | Purpose | Initial policy |
 | --- | --- | --- |
-| `FORK_CI_ENABLED` | Upstream source checks and CodeQL | Enable for reviewed source CI |
+| `FORK_CI_ENABLED` | Upstream source checks, CodeQL, and Scorecard | Enable for reviewed source CI |
 | `FORK_PUBLISH_ENABLED` | Custom fork image/chart publication | Keep disabled until registry ownership and all chart image references are verified |
 | `FORK_RELEASE_ENABLED` | Release/version orchestration | Keep disabled until a fork release process is needed |
 | `FORK_E2E_ENABLED` | Upstream cluster and quickstart tests | Enable deliberately after runner capacity and target artifacts are selected |
@@ -119,6 +123,34 @@ Upstream's build recipes currently disable BuildKit SBOM and provenance output.
 The upstream release signs images, but signing alone is not an SBOM or provenance
 attestation. A custom distribution must add the required evidence and verify
 image references in every published chart before promotion.
+
+## Control CI resource use
+
+GitHub's [billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+states that standard GitHub-hosted runner compute is free for public repositories;
+larger runners are billed. This fork uses standard Linux runner labels. Keep the
+useful source checks enabled when reviewing source changes, while preserving the
+separate opt-ins for image publishing, cluster tests, maintenance, and schedules.
+Do not treat a skipped workflow as passing source validation.
+
+The source, fork configuration, PR title, and security-check jobs have explicit
+timeouts. Superseded PR checks are cancelled where the workflow can safely discard
+the older result. Fork source builds upload their binary artifacts only when a
+push will run the publisher. Image-build handoff artifacts expire after one day.
+The `occ` artifact is also a CLI release input: when `FORK_RELEASE_ENABLED=true`,
+it retains the repository's normal artifact retention instead. Published images
+and release assets have separate retention policies. A publisher rerun after the
+handoff artifacts expire requires rerunning the build as well. After enabling
+release automation, build a fresh candidate with that setting enabled before
+tagging; do not assume an earlier check-only or expired build is release-ready.
+
+Artifact and cache storage have separate allowances. Review the organization's
+actual usage and stop-usage budget before enabling paid workloads or increasing
+cache limits. Use each upload's
+[retention-days input](https://github.com/actions/upload-artifact#inputs)
+to control temporary artifacts. Do not shorten the repository-wide retention
+setting solely to save artifact storage: that
+[setting also controls historical checks, workflow runs, commit statuses, and logs](https://docs.github.com/en/organizations/managing-organization-settings/configuring-the-retention-period-for-github-actions-artifacts-and-logs-in-your-organization).
 
 ## Upstream synchronization
 
