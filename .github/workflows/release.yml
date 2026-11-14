@@ -10,14 +10,15 @@ permissions:
 
 env:
   OCI_REGISTRY_HOST: ${{ vars.OCI_REGISTRY_HOST || 'ghcr.io' }}
-  IMAGE_REPO_PREFIX: ${{ vars.IMAGE_REPO_PREFIX || 'ghcr.io/openchoreo' }}
-  HELM_OCI_REGISTRY: ${{ vars.HELM_OCI_REGISTRY || 'oci://ghcr.io/openchoreo/helm-charts' }}
-  PUBLISH_LATEST: ${{ vars.PUBLISH_LATEST || 'true' }}
+  IMAGE_REPO_PREFIX: ${{ vars.IMAGE_REPO_PREFIX || (github.repository == 'openchoreo/openchoreo' && 'ghcr.io/openchoreo' || '') }}
+  HELM_OCI_REGISTRY: ${{ vars.HELM_OCI_REGISTRY || (github.repository == 'openchoreo/openchoreo' && 'oci://ghcr.io/openchoreo/helm-charts' || '') }}
+  PUBLISH_LATEST: ${{ vars.PUBLISH_LATEST || (github.repository == 'openchoreo/openchoreo' && 'true' || 'false') }}
 
 jobs:
   # In the release job, try to use artifacts from the build job as much as possible
   # to keep the release deterministic. This will ensure the release includes the tested artifacts.
   release:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true') }}
     name: Release
     runs-on: ubuntu-24.04
     permissions:
@@ -26,6 +27,31 @@ jobs:
       packages: write
       id-token: write # Required for Cosign keyless signing via GitHub OIDC
     steps:
+      - name: Validate fork publication destination
+        if: github.repository != 'openchoreo/openchoreo'
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${IMAGE_REPO_PREFIX:?Set IMAGE_REPO_PREFIX to the fork-owned registry namespace}"
+          : "${HELM_OCI_REGISTRY:?Set HELM_OCI_REGISTRY to the fork-owned chart namespace}"
+          if [[ "$IMAGE_REPO_PREFIX" != "${OCI_REGISTRY_HOST}/"* ||
+                "$HELM_OCI_REGISTRY" != "oci://${OCI_REGISTRY_HOST}/"* ]]; then
+            echo "::error::Image and Helm destinations must use OCI_REGISTRY_HOST."
+            exit 1
+          fi
+          if [[ "$OCI_REGISTRY_HOST" == 'ghcr.io' ]]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            if [[ "$IMAGE_REPO_PREFIX" != "ghcr.io/${owner}" &&
+                  "$IMAGE_REPO_PREFIX" != "ghcr.io/${owner}/"* ]]; then
+              echo "::error::GHCR images must be scoped to this fork's owner."
+              exit 1
+            fi
+            if [[ "$HELM_OCI_REGISTRY" != "oci://ghcr.io/${owner}/"* ]]; then
+              echo "::error::GHCR charts must be scoped to this fork's owner."
+              exit 1
+            fi
+          fi
+
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -37,16 +63,18 @@ jobs:
 
       - name: Set commit SHA and release tag
         run: |
-          echo "GIT_SHA_SHORT=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
-          echo "GIT_SHA_LONG=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          RELEASE_TAG=$(echo ${GITHUB_REF##*/})
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-          echo "RELEASE_TAG_WITHOUT_V=$(echo ${GITHUB_REF##*/v})" >> $GITHUB_ENV
+          RELEASE_TAG="${GITHUB_REF##*/}"
+          {
+            echo "GIT_SHA_SHORT=$(git rev-parse --short=8 HEAD)"
+            echo "GIT_SHA_LONG=$(git rev-parse HEAD)"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "RELEASE_TAG_WITHOUT_V=${GITHUB_REF##*/v}"
+          } >> "$GITHUB_ENV"
           # Detect prerelease versions (SemVer tags containing a hyphen, e.g., v1.0.0-rc.1)
           if [[ "${RELEASE_TAG}" == *-* ]]; then
-            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
+            echo "IS_PRERELEASE=true" >> "$GITHUB_ENV"
           else
-            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
+            echo "IS_PRERELEASE=false" >> "$GITHUB_ENV"
           fi
 
       - name: Set Latest Flag
@@ -54,9 +82,9 @@ jobs:
           git fetch --tags --force
           latest_tag=$(git tag -l | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
             if [ "$latest_tag" == "${RELEASE_TAG}" ]; then
-                echo "LATEST=true" >> $GITHUB_ENV
+                echo "LATEST=true" >> "$GITHUB_ENV"
             else
-                echo "LATEST=false" >> $GITHUB_ENV
+                echo "LATEST=false" >> "$GITHUB_ENV"
             fi
 
       - name: Resolve previous release tag
@@ -82,7 +110,7 @@ jobs:
             | sed 's/-/~/' | sort -V -u | sed 's/~/-/' \
             | awk -v cur="${RELEASE_TAG}" '$0==cur{exit} {p=$0} END{print p}')
           echo "Previous release tag: ${PREVIOUS_TAG:-<none>}"
-          echo "PREVIOUS_TAG=${PREVIOUS_TAG}" >> $GITHUB_ENV
+          echo "PREVIOUS_TAG=${PREVIOUS_TAG}" >> "$GITHUB_ENV"
 
       - name: Validate VERSION file
         run: |

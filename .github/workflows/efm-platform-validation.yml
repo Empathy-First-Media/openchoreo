@@ -1,0 +1,64 @@
+name: Fork Configuration Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, "release-v*"]
+  push:
+    branches: [main, "release-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-configuration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  configuration:
+    name: Workflow and task validation
+    if: github.repository != 'openchoreo/openchoreo'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install project workflow tooling
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          version: 2026.11.8
+          install: false
+          cache_save: ${{ github.event_name != 'pull_request' }}
+          cache_save_post: true
+
+      - name: Validate native task definitions
+        run: mise tasks validate
+
+      - name: Validate GitHub Actions workflows
+        run: mise run ci:workflow-lint
+
+  platform:
+    name: Platform chart validation
+    if: github.repository != 'openchoreo/openchoreo' && vars.FORK_CI_ENABLED == 'true'
+    needs: [configuration]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install project platform tooling
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          version: 2026.11.8
+          install: false
+          cache_save: ${{ github.event_name != 'pull_request' }}
+          cache_save_post: true
+
+      - name: Render and lint the pinned platform configuration
+        run: mise run platform:validate

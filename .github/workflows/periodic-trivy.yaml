@@ -10,6 +10,7 @@ permissions: {}
 
 jobs:
   trigger-scan:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true' }}
     name: Trigger scan (${{ matrix.branch }})
     runs-on: ubuntu-latest
     permissions:

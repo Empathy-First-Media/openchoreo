@@ -1,0 +1,65 @@
+# OpenChoreo 1.3.3: private pilot on an existing Kubernetes cluster.
+# Pair with reviewed, external private values; this file alone is incomplete.
+# The upstream .invalid issuer deliberately makes Helm reject an unconfigured
+# install. Never disable authentication to make a template or deployment pass.
+security:
+  enabled: true
+  authz:
+    enabled: true
+  oidc:
+    jwksUrlTlsInsecureSkipVerify: false
+    uidResolverTlsInsecureSkipVerify: false
+    externalClients: []
+
+# Reuse the organization's existing catalog and portal. Evaluate the upstream
+# Backstage plugins in that portal before enabling a separate deployment.
+backstage:
+  enabled: false
+  http:
+    enabled: false
+eventForwarder:
+  enabled: false
+portalAssistant:
+  enabled: false
+
+# No demo ingress, external load balancer, DNS records, or gateway routes.
+gateway:
+  enabled: false
+openchoreoApi:
+  service:
+    type: ClusterIP
+  http:
+    enabled: false
+  clusterGateway:
+    tls:
+      insecure: false
+  config:
+    security:
+      authentication:
+        jwt:
+          jwks:
+            skip_tls_verify: false
+      authorization:
+        bootstrap:
+          # Replace in private configuration with explicitly scoped mappings.
+          # This replaces the entire upstream example entitlement-binding list,
+          # including its example MCP administrator and client identifiers.
+          mappings: []
+    mcp:
+      enabled: false
+    remoteConnect:
+      enabled: false
+
+controllerManager:
+  clusterGateway:
+    tls:
+      insecure: false
+clusterGateway:
+  service:
+    type: ClusterIP
+  tlsRoute:
+    enabled: false
+  internalMtls:
+    enabled: true
+  agentAuth:
+    mode: mtls

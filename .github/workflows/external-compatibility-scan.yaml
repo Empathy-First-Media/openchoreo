@@ -27,13 +27,14 @@ permissions:
 
 jobs:
   scan:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true' }}
     name: Scan curated external compatibility sources
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       NOTIFY_ON_FIRST_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_on_first_run || false }}
-      POST_TO_SLACK: ${{ github.event_name != 'workflow_dispatch' || inputs.post_to_slack }}
+      POST_TO_SLACK: ${{ (github.repository == 'openchoreo/openchoreo' || vars.FORK_NOTIFICATIONS_ENABLED == 'true') && (github.event_name != 'workflow_dispatch' || inputs.post_to_slack) }}
 
     steps:
       - name: Checkout code

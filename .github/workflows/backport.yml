@@ -28,8 +28,8 @@ jobs:
       pull-requests: write
     # Only run for merged PRs that carry a `backport/` label.
     if: >-
-      github.event.pull_request.merged &&
-      contains(toJSON(github.event.pull_request.labels.*.name), '"backport/')
+      ${{ (github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true') &&
+          (github.event.pull_request.merged && contains(toJSON(github.event.pull_request.labels.*.name), '"backport/')) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

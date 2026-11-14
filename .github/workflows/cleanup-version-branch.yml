@@ -10,7 +10,9 @@ on:
 jobs:
   cleanup:
     name: Delete release-next branch after merge
-    if: github.event.pull_request.merged == true && startsWith(github.head_ref, 'release-next-v')
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true')) &&
+          (github.event.pull_request.merged == true && startsWith(github.head_ref, 'release-next-v')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

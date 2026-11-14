@@ -1,0 +1,172 @@
+name: Propose Upstream Synchronization
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Opt in with UPSTREAM_SYNC_SCHEDULE_ENABLED=true after the manual run passes.
+    - cron: "23 13 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-sync-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    name: Open or update the upstream review branch
+    if: >-
+      ${{ github.event.repository.fork &&
+          (github.event_name == 'workflow_dispatch' || vars.UPSTREAM_SYNC_SCHEDULE_ENABLED == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Optional: a repository-scoped App allows the resulting PR checks to run
+      # without the approval required for PRs created using GITHUB_TOKEN.
+      # Updating inherited workflow files also requires Workflows: write on the App.
+      - name: Create scoped synchronization token
+        if: vars.UPSTREAM_SYNC_APP_CLIENT_ID != ''
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.UPSTREAM_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UPSTREAM_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
+      - name: Checkout the approved default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge upstream into a review branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          UPSTREAM_BRANCH: ${{ vars.UPSTREAM_SYNC_BRANCH }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          metadata=$(gh api "repos/${GITHUB_REPOSITORY}")
+          base_branch=$(jq -er '.default_branch' <<< "$metadata")
+          upstream_repository=$(jq -er '.parent.full_name' <<< "$metadata")
+          upstream_branch="$UPSTREAM_BRANCH"
+          if [[ -z "$upstream_branch" ]]; then
+            upstream_branch=$(jq -er '.parent.default_branch' <<< "$metadata")
+          fi
+          sync_branch='automation/upstream-sync'
+          marker='<!-- openchoreo-upstream-sync -->'
+
+          # Read the fork relationship from GitHub; never infer an owner or use a
+          # caller-supplied repository URL as a privileged checkout destination.
+          [[ "$upstream_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          git check-ref-format --branch "$base_branch"
+          git check-ref-format --branch "$upstream_branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config core.hooksPath /dev/null
+          gh auth setup-git --hostname github.com
+
+          git fetch --no-tags origin "refs/heads/${base_branch}:refs/remotes/origin/${base_branch}"
+          git fetch --no-tags "https://github.com/${upstream_repository}.git" \
+            "refs/heads/${upstream_branch}:refs/remotes/upstream/selected"
+          base_sha=$(git rev-parse "refs/remotes/origin/${base_branch}")
+          upstream_sha=$(git rev-parse refs/remotes/upstream/selected)
+
+          if git merge-base --is-ancestor "$upstream_sha" "$base_sha"; then
+            printf 'The approved branch already contains upstream commit %s.\n' "$upstream_sha" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          pull_requests=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --base "$base_branch" --head "$sync_branch" \
+            --json number,body,url,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false)]')
+          remote_branch=$(git ls-remote --heads origin "refs/heads/${sync_branch}")
+          if [[ -n "$remote_branch" ]]; then
+            # Preserve an existing review branch and its history. Never repurpose
+            # an unrelated branch, overwrite it, or force-push a reviewer's work.
+            git fetch --no-tags origin "refs/heads/${sync_branch}:refs/remotes/origin/${sync_branch}"
+            remote_sha=$(git rev-parse "refs/remotes/origin/${sync_branch}")
+            if jq -e --arg marker "$marker" \
+              'length == 1 and (.[0].body | contains($marker))' <<< "$pull_requests" >/dev/null; then
+              echo 'Updating the existing managed review branch.'
+            elif jq -e 'length == 0' <<< "$pull_requests" >/dev/null; then
+              # GitHub can retain the head branch after merging a PR. Reuse it
+              # only when that exact tip belongs to a merged managed PR and is
+              # already contained in the approved base; no history is discarded.
+              merged_pull_requests=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged \
+                --base "$base_branch" --head "$sync_branch" --limit 100 \
+                --json body,headRefOid,isCrossRepository)
+              if ! jq -e --arg marker "$marker" --arg sha "$remote_sha" \
+                'any(.[]; .isCrossRepository == false and .headRefOid == $sha and (.body | contains($marker)))' \
+                <<< "$merged_pull_requests" >/dev/null ||
+                ! git merge-base --is-ancestor "$remote_sha" "$base_sha"; then
+                echo "::error::The retained branch is not an unchanged, fully merged managed branch. Review it before retrying."
+                exit 1
+              fi
+              echo 'Reusing the retained branch from its verified merged PR.'
+            else
+              echo "::error::automation/upstream-sync has an unrelated open PR. Review that branch before retrying."
+              exit 1
+            fi
+            git checkout -b "$sync_branch" "refs/remotes/origin/${sync_branch}"
+            if ! git merge --no-edit "$base_sha"; then
+              git merge --abort
+              echo "::error::The review branch conflicts with the approved base. Resolve its PR manually."
+              exit 1
+            fi
+          else
+            if ! jq -e 'length == 0' <<< "$pull_requests" >/dev/null; then
+              echo "::error::An open synchronization PR has no remote branch. Restore and review its branch before retrying."
+              exit 1
+            fi
+            git checkout -b "$sync_branch" "$base_sha"
+          fi
+
+          if ! git merge --no-edit --no-ff "$upstream_sha"; then
+            git merge --abort
+            echo "::error::Upstream conflicts with the fork. No remote branch was changed. Resolve the merge on a review branch."
+            exit 1
+          fi
+
+          git push origin "HEAD:refs/heads/${sync_branch}"
+          pr_number=$(jq -r '.[0].number // empty' <<< "$pull_requests")
+          if [[ -z "$pr_number" ]]; then
+            body_file="${RUNNER_TEMP}/upstream-sync-pr.md"
+            {
+              printf '%s\n\n' "$marker"
+              printf 'Merge reviewed changes from %s branch %s.\n\n' "$upstream_repository" "$upstream_branch"
+              printf 'Originally proposed upstream commit: %s. Later runs may add commits to this review branch.\n\n' "$upstream_sha"
+              printf '%s\n' \
+                '## Required review' \
+                '' \
+                '- Inspect changes to workflows, permissions, charts, and dependencies.' \
+                '- Run the enabled source and platform checks on the latest PR commit.' \
+                '- Use a merge commit for this synchronization PR to preserve upstream ancestry.' \
+                '- Keep deployment release pins unchanged until a separate environment upgrade is validated.' \
+                '- Approve workflow runs when this PR was created using GITHUB_TOKEN.' \
+                '' \
+                'This automation never merges the PR or deploys the upstream branch.'
+            } > "$body_file"
+            gh pr create --repo "$GITHUB_REPOSITORY" --base "$base_branch" \
+              --head "$sync_branch" --draft \
+              --title 'chore: synchronize reviewed upstream changes' \
+              --body-file "$body_file"
+          fi
+
+          pr_url=$(gh pr view "$sync_branch" --repo "$GITHUB_REPOSITORY" --json url --jq '.url')
+          {
+            printf 'Review pull request: %s\n\n' "$pr_url"
+            printf 'Proposed upstream commit: %s.\n\n' "$upstream_sha"
+            printf '%s\n' 'Default-branch merge and deployment require separate review.'
+          } >> "$GITHUB_STEP_SUMMARY"

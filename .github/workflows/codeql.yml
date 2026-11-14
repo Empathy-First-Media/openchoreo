@@ -16,6 +16,10 @@ permissions:
 
 jobs:
   analyze:
+    if: >-
+      ${{ github.repository == 'openchoreo/openchoreo' ||
+          (vars.FORK_CI_ENABLED == 'true' &&
+           (github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true')) }}
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:

@@ -18,6 +18,7 @@ permissions:
 
 jobs:
   analysis:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true' }}
     name: Scorecard Analysis
     runs-on: ubuntu-latest
     permissions:

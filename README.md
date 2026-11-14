@@ -1,3 +1,10 @@
+## Empathy First Media fork
+
+Start with the [AI Agency Pro implementation guide](docs/aiagencypro/README.md)
+for development tasks, fork automation, and the staged Kubernetes deployment.
+The upstream documentation below describes OpenChoreo itself; upstream badges do
+not report this fork's build or deployment status.
+
 <div align="left">
   <p></p><p></p>
   <picture>

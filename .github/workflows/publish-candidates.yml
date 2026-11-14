@@ -9,15 +9,41 @@ on:
 
 env:
   OCI_REGISTRY_HOST: ${{ vars.OCI_REGISTRY_HOST || 'ghcr.io' }}
-  IMAGE_REPO_PREFIX: ${{ vars.IMAGE_REPO_PREFIX || 'ghcr.io/openchoreo' }}
-  HELM_OCI_REGISTRY: ${{ vars.HELM_OCI_REGISTRY || 'oci://ghcr.io/openchoreo/helm-charts' }}
-  PUBLISH_LATEST: ${{ vars.PUBLISH_LATEST || 'true' }}
+  IMAGE_REPO_PREFIX: ${{ vars.IMAGE_REPO_PREFIX || (github.repository == 'openchoreo/openchoreo' && 'ghcr.io/openchoreo' || '') }}
+  HELM_OCI_REGISTRY: ${{ vars.HELM_OCI_REGISTRY || (github.repository == 'openchoreo/openchoreo' && 'oci://ghcr.io/openchoreo/helm-charts' || '') }}
+  PUBLISH_LATEST: ${{ vars.PUBLISH_LATEST || (github.repository == 'openchoreo/openchoreo' && 'true' || 'false') }}
 
 jobs:
   publish:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || vars.FORK_PUBLISH_ENABLED == 'true' }}
     name: Publish
     runs-on: ubuntu-24.04
     steps:
+      - name: Validate fork publication destination
+        if: github.repository != 'openchoreo/openchoreo'
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${IMAGE_REPO_PREFIX:?Set IMAGE_REPO_PREFIX to the fork-owned registry namespace}"
+          : "${HELM_OCI_REGISTRY:?Set HELM_OCI_REGISTRY to the fork-owned chart namespace}"
+          if [[ "$IMAGE_REPO_PREFIX" != "${OCI_REGISTRY_HOST}/"* ||
+                "$HELM_OCI_REGISTRY" != "oci://${OCI_REGISTRY_HOST}/"* ]]; then
+            echo "::error::Image and Helm destinations must use OCI_REGISTRY_HOST."
+            exit 1
+          fi
+          if [[ "$OCI_REGISTRY_HOST" == 'ghcr.io' ]]; then
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            if [[ "$IMAGE_REPO_PREFIX" != "ghcr.io/${owner}" &&
+                  "$IMAGE_REPO_PREFIX" != "ghcr.io/${owner}/"* ]]; then
+              echo "::error::GHCR images must be scoped to this fork's owner."
+              exit 1
+            fi
+            if [[ "$HELM_OCI_REGISTRY" != "oci://ghcr.io/${owner}/"* ]]; then
+              echo "::error::GHCR charts must be scoped to this fork's owner."
+              exit 1
+            fi
+          fi
+
       - name: Clone the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
