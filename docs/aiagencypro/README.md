@@ -21,6 +21,9 @@ private owners.
    GitOps, tenant boundaries, MCP, promotion and acceptance criteria.
 4. [Private pilot configuration](../../deploy/aiagencypro/README.md): render and
    install the released charts into an explicitly selected existing cluster.
+5. [Apple Silicon and private tailnet pilot](local-tailnet.md): inspect the existing
+   local Docker engine, create an isolated k3d cluster, and validate private access
+   before adding the existing portal or optional platform capabilities.
 
 ## Release boundaries
 

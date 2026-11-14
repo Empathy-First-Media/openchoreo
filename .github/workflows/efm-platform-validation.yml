@@ -40,6 +40,9 @@ jobs:
       - name: Validate GitHub Actions workflows
         run: mise run ci:workflow-lint
 
+      - name: Validate the private local k3d configuration
+        run: mise run local:validate
+
       # Configuration changes must be validated even while source CI is disabled.
       - name: Render and lint the pinned platform configuration
         run: mise run platform:validate

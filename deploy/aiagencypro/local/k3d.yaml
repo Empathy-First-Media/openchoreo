@@ -1,0 +1,28 @@
+# Native k3d configuration; versions and operator inputs come from the mise task.
+# No application ports, local registry, default kubeconfig update, or ingress.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ${OPENCHOREO_CLUSTER_NAME}
+image: ${OPENCHOREO_K3S_IMAGE}
+servers: 1
+agents: 0
+kubeAPI:
+  host: 127.0.0.1
+  hostIP: 127.0.0.1
+  hostPort: "${OPENCHOREO_KUBE_PORT}"
+options:
+  k3d:
+    wait: true
+    timeout: 300s
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*
+      - arg: --disable=servicelb
+        nodeFilters:
+          - server:*
+  kubeconfig:
+    updateDefaultKubeconfig: false
+    switchCurrentContext: false

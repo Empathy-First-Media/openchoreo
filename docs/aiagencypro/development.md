@@ -56,9 +56,14 @@ This coverage does not depend on enabling the platform's full source build.
 
 ## Run the released platform locally
 
-The simplest functional evaluation uses the official release quickstart container.
-This is separate from building the platform's own Go code. It requires a working
-Docker daemon, sufficient memory, and an isolated development Docker context.
+For an M1 Mac with private tailnet access, use the
+[private local pilot](local-tailnet.md). It uses native k3d, an isolated kubeconfig,
+loopback access and the existing identity provider.
+
+The official release quickstart container remains available for a disposable
+demo. This is separate from building the platform's own Go code. It requires a
+working Docker daemon, sufficient memory, and an isolated local development
+Docker context.
 
 ```bash
 docker context ls
@@ -75,10 +80,15 @@ Inside the official container:
 ./deploy-react-starter.sh
 ```
 
-The task uses the upstream privileged container, mounts the selected Docker
-daemon's socket, and uses host networking. Run it only on the explicitly selected
-disposable development daemon. On macOS, verify the chosen Docker/Colima host-network
-configuration and resources against the official guide. The quickstart creates a
+The task follows the official command without the unnecessary `--privileged`
+flag. It mounts the fixed daemon-side `/var/run/docker.sock` and uses host
+networking. That socket still gives the helper broad control of the Docker
+daemon. Use only a disposable development daemon, and supply no production
+credentials. The task rejects non-Unix Docker contexts; it does not remap or
+verify the identity of the mounted socket. On macOS, verify the chosen provider's
+documented socket mount, host-network configuration and resources before use.
+Command/configuration checks are not a runtime test on the target Mac.
+The quickstart creates a
 local k3d cluster and supplies demo identities and services. Keep this environment
 local. The installer uses the fixed k3d cluster name `openchoreo-quick-start`;
 choosing a unique helper-container name does not create a separate cluster.
