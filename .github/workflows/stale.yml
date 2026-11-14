@@ -10,6 +10,9 @@ permissions: {}
 
 jobs:
   stale:
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true') &&
+          (github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true') }}
     name: Mark Stale Issues
     runs-on: ubuntu-latest
     permissions:

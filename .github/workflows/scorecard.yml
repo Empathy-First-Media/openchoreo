@@ -16,11 +16,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analysis:
+    if: >-
+      ${{ github.repository == 'openchoreo/openchoreo' ||
+          (vars.FORK_CI_ENABLED == 'true' &&
+           (github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true')) }}
     name: Scorecard Analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
+      contents: read
       # Required to upload results to code-scanning dashboard
       security-events: write
       # Required to publish results and get a badge

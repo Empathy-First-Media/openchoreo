@@ -30,6 +30,7 @@ concurrency:
 
 jobs:
   prepare:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -93,8 +94,8 @@ jobs:
             TARGET="main"
           fi
 
-          echo "TARGET=${TARGET}" >> $GITHUB_ENV
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "TARGET=${TARGET}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Create version bump branch and PR
         env:

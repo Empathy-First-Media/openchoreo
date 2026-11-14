@@ -71,6 +71,7 @@ jobs:
   # Always runs; outputs computed values consumed by branch and tag.
   # ----------------------------------------------------------------
   validate:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -134,26 +135,30 @@ jobs:
           fi
 
           TAG="v${VERSION}"
-          echo "MAJOR=${MAJOR}" >> $GITHUB_ENV
-          echo "MINOR=${MINOR}" >> $GITHUB_ENV
-          echo "PRERELEASE=${PRERELEASE}" >> $GITHUB_ENV
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
-          echo "release-tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "release-version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "checkout-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-          echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
-          echo "release-branch=${RELEASE_BRANCH}" >> $GITHUB_OUTPUT
+          {
+            echo "MAJOR=${MAJOR}"
+            echo "MINOR=${MINOR}"
+            echo "PRERELEASE=${PRERELEASE}"
+            echo "VERSION=${VERSION}"
+            echo "RELEASE_TAG=${TAG}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "release-tag=${TAG}"
+            echo "release-version=${VERSION}"
+            echo "checkout-sha=$(git rev-parse HEAD)"
+            echo "prerelease=${PRERELEASE}"
+            echo "release-branch=${RELEASE_BRANCH}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check if release branch exists
         id: check-branch
         run: |
           if git ls-remote --exit-code origin "refs/heads/${{ steps.resolve-version.outputs.release-branch }}" 2>/dev/null; then
-            echo "branch-exists=true" >> $GITHUB_OUTPUT
-            echo "BRANCH_EXISTS=true" >> $GITHUB_ENV
+            echo "branch-exists=true" >> "$GITHUB_OUTPUT"
+            echo "BRANCH_EXISTS=true" >> "$GITHUB_ENV"
           else
-            echo "branch-exists=false" >> $GITHUB_OUTPUT
-            echo "BRANCH_EXISTS=false" >> $GITHUB_ENV
+            echo "branch-exists=false" >> "$GITHUB_OUTPUT"
+            echo "BRANCH_EXISTS=false" >> "$GITHUB_ENV"
           fi
 
       # main tracks 0.0.0-latest-dev module charts; a new release branch must pin
@@ -269,8 +274,8 @@ jobs:
             echo "Target: current HEAD (${TARGET})"
           fi
 
-          echo "target-commit=${TARGET}" >> $GITHUB_OUTPUT
-          echo "TARGET_COMMIT=${TARGET}" >> $GITHUB_ENV
+          echo "target-commit=${TARGET}" >> "$GITHUB_OUTPUT"
+          echo "TARGET_COMMIT=${TARGET}" >> "$GITHUB_ENV"
 
       - name: Wait for build-and-test at target commit
         if: ${{ github.event.inputs.action == 'full' || github.event.inputs.action == 'tag' }}
@@ -318,7 +323,9 @@ jobs:
   # ----------------------------------------------------------------
   branch:
     needs: [validate]
-    if: ${{ needs.validate.outputs.branch-exists == 'false' && (github.event.inputs.action == 'full' || github.event.inputs.action == 'branch') }}
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true')) &&
+          (needs.validate.outputs.branch-exists == 'false' && (github.event.inputs.action == 'full' || github.event.inputs.action == 'branch')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -411,7 +418,9 @@ jobs:
   # ----------------------------------------------------------------
   resolve-target:
     needs: [validate, branch]
-    if: ${{ always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag' || github.event.inputs.action == 'branch') }}
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true')) &&
+          (always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag' || github.event.inputs.action == 'branch')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -455,8 +464,8 @@ jobs:
             echo "Target: HEAD of ${RELEASE_BRANCH} (${TARGET})"
           fi
           SHORT_SHA=$(git rev-parse --short=8 "${TARGET}")
-          echo "target=${TARGET}" >> $GITHUB_OUTPUT
-          echo "helm-chart-version=0.0.0-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
+          echo "helm-chart-version=0.0.0-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       # Never gate or tag a commit that still installs 0.0.0-latest-dev modules
       # (e.g. a backport from main, or an explicit commit_sha on main).
@@ -557,13 +566,13 @@ jobs:
           DESCRIPTION=$(echo "$STATUS_JSON" | jq -r '.description // ""')
           if [ "$STATE" = "success" ] && [ "$DESCRIPTION" = "$EXPECTED_DESC" ]; then
             echo "e2e gate already passed at ${TARGET} for ${EXPECTED_DESC}; it will be reused."
-            echo "e2e-already-passed=true" >> $GITHUB_OUTPUT
+            echo "e2e-already-passed=true" >> "$GITHUB_OUTPUT"
           elif [ "$STATE" = "success" ]; then
             echo "e2e gate passed at ${TARGET} but for different artifacts ('${DESCRIPTION}' vs expected '${EXPECTED_DESC}'); the gate will run again."
-            echo "e2e-already-passed=false" >> $GITHUB_OUTPUT
+            echo "e2e-already-passed=false" >> "$GITHUB_OUTPUT"
           else
             echo "No passing e2e gate at ${TARGET} (state: ${STATE}); the gate will run."
-            echo "e2e-already-passed=false" >> $GITHUB_OUTPUT
+            echo "e2e-already-passed=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ----------------------------------------------------------------
@@ -576,7 +585,9 @@ jobs:
   # ----------------------------------------------------------------
   e2e:
     needs: [validate, resolve-target]
-    if: ${{ always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag' || github.event.inputs.action == 'branch') && !inputs.skip_e2e && needs.resolve-target.outputs.e2e-already-passed != 'true' }}
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true')) &&
+          (always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag' || github.event.inputs.action == 'branch') && !inputs.skip_e2e && needs.resolve-target.outputs.e2e-already-passed != 'true') }}
     permissions:
       contents: read
       statuses: write
@@ -598,7 +609,9 @@ jobs:
   # ----------------------------------------------------------------
   tag:
     needs: [validate, branch, resolve-target, e2e]
-    if: ${{ always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag') }}
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || (vars.FORK_RELEASE_ENABLED == 'true' && vars.FORK_PUBLISH_ENABLED == 'true' && vars.FORK_CI_ENABLED == 'true' && vars.FORK_E2E_ENABLED == 'true')) &&
+          (always() && !failure() && !cancelled() && (github.event.inputs.action == 'full' || github.event.inputs.action == 'tag')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

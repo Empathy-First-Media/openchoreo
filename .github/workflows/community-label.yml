@@ -14,7 +14,9 @@ permissions: {}
 jobs:
   label-new:
     name: Label New Issue, PR, or Discussion
-    if: github.event_name != 'workflow_dispatch'
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true') &&
+          (github.event_name != 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,7 +70,9 @@ jobs:
 
   backfill:
     name: Backfill Community Label
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      ${{ (github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true') &&
+          (github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

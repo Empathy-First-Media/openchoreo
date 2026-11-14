@@ -46,6 +46,7 @@ env:
 
 jobs:
   quick-start:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || (vars.FORK_E2E_ENABLED == 'true' && (github.event_name != 'schedule' || vars.FORK_SCHEDULED_CHECKS_ENABLED == 'true')) }}
     name: Quick Start (build + observability)
     runs-on: ubuntu-24.04
     timeout-minutes: 75

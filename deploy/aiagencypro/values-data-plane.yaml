@@ -1,0 +1,19 @@
+# OpenChoreo 1.3.3: same-cluster agent, initially without public application
+# ingress. Use the upstream installation namespaces documented in README.md;
+# alternate namespaces require coordinated service URL and certificate changes.
+gateway:
+  enabled: false
+  # v1.3.3 validates listener hostnames even when Gateway creation is off.
+  # Disable the unused listener, not cluster-agent transport encryption.
+  tls:
+    enabled: false
+  tlsPassthrough:
+    enabled: false
+security:
+  enabled: true
+clusterAgent:
+  tls:
+    enabled: true
+    generateCerts: true
+remoteAgentRouter:
+  enabled: false

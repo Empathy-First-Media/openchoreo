@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   cleanup-docker-images:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true' }}
     name: Cleanup Docker Images
     runs-on: ubuntu-latest
     permissions:
@@ -39,7 +40,7 @@ jobs:
         id: cutoff
         run: |
           CUTOFF=$(date -d "${{ inputs.retention_days }} days ago" -Iseconds -u)
-          echo "date=$CUTOFF" >> $GITHUB_OUTPUT
+          echo "date=$CUTOFF" >> "$GITHUB_OUTPUT"
           echo "Cutoff date: $CUTOFF (retention: ${{ inputs.retention_days }} days, dry_run: ${{ inputs.dry_run }})"
 
       - name: Find old SHA-only versions
@@ -65,15 +66,17 @@ jobs:
 
           if [ -z "$VERSIONS" ]; then
             echo "No old SHA-only versions found for ${{ matrix.package }}"
-            echo "count=0" >> $GITHUB_OUTPUT
+            echo "count=0" >> "$GITHUB_OUTPUT"
           else
             COUNT=$(echo "$VERSIONS" | jq -s 'length')
             echo "Found $COUNT old SHA-only version(s) for ${{ matrix.package }}:"
             echo "$VERSIONS" | jq -r '"  - \(.tags[0]) (created: \(.created_at), id: \(.id))"'
-            echo "versions<<EOF" >> $GITHUB_OUTPUT
-            echo "$VERSIONS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            echo "count=$COUNT" >> $GITHUB_OUTPUT
+            {
+              echo "versions<<EOF"
+              echo "$VERSIONS"
+              echo "EOF"
+              echo "count=$COUNT"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Delete old versions
@@ -100,6 +103,7 @@ jobs:
           fi
 
   cleanup-helm-charts:
+    if: ${{ github.repository == 'openchoreo/openchoreo' || vars.FORK_MAINTENANCE_ENABLED == 'true' }}
     name: Cleanup Helm Charts
     runs-on: ubuntu-latest
     permissions:
@@ -116,7 +120,7 @@ jobs:
         id: cutoff
         run: |
           CUTOFF=$(date -d "${{ inputs.retention_days }} days ago" -Iseconds -u)
-          echo "date=$CUTOFF" >> $GITHUB_OUTPUT
+          echo "date=$CUTOFF" >> "$GITHUB_OUTPUT"
           echo "Cutoff date: $CUTOFF (retention: ${{ inputs.retention_days }} days, dry_run: ${{ inputs.dry_run }})"
 
       - name: Find old SHA-only versions
@@ -143,15 +147,17 @@ jobs:
 
           if [ -z "$VERSIONS" ]; then
             echo "No old SHA-only versions found for helm-charts/${{ matrix.chart }}"
-            echo "count=0" >> $GITHUB_OUTPUT
+            echo "count=0" >> "$GITHUB_OUTPUT"
           else
             COUNT=$(echo "$VERSIONS" | jq -s 'length')
             echo "Found $COUNT old SHA-only version(s) for helm-charts/${{ matrix.chart }}:"
             echo "$VERSIONS" | jq -r '"  - \(.tags[0]) (created: \(.created_at), id: \(.id))"'
-            echo "versions<<EOF" >> $GITHUB_OUTPUT
-            echo "$VERSIONS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            echo "count=$COUNT" >> $GITHUB_OUTPUT
+            {
+              echo "versions<<EOF"
+              echo "$VERSIONS"
+              echo "EOF"
+              echo "count=$COUNT"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Delete old versions
